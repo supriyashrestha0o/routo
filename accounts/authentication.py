@@ -23,7 +23,7 @@ class FirebaseAuthentication(BaseAuthentication):
             raise
         except Exception as exc:
             raise AuthenticationFailed("Invalid or expired Firebase ID token.") from exc
-        from routo.accounts.models import RouteUser
+        from accounts.models import RouteUser
         user, _ = RouteUser.objects.update_or_create(
             firebase_uid=claims["uid"], defaults={"email": claims.get("email", "")})
         return user, claims

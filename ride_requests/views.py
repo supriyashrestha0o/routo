@@ -3,11 +3,11 @@ from rest_framework import generics
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from routo.journeys.models import Journey
-from routo.notifications.services import send_push
-from routo.ride_requests.models import RideRequest
-from routo.ride_requests.serializers import RideRequestSerializer
-from routo.ride_requests.services import decide_request
+from journeys.models import Journey
+from notifications.services import send_push
+from ride_requests.models import RideRequest
+from ride_requests.serializers import RideRequestSerializer
+from ride_requests.services import decide_request
 
 class RideRequestCreateView(generics.CreateAPIView):
     serializer_class = RideRequestSerializer

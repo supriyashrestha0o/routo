@@ -3,9 +3,9 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
-from routo.accounts.models import RouteUser
-from routo.journeys.models import Journey
-from routo.ride_requests.models import RideRequest
+from accounts.models import RouteUser
+from journeys.models import Journey
+from ride_requests.models import RideRequest
 
 class RideRequestApiTests(TestCase):
     def setUp(self):

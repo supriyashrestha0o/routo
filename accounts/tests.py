@@ -1,6 +1,6 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
-from routo.accounts.models import RouteUser
+from accounts.models import RouteUser
 
 class AccountApiTests(TestCase):
     def test_authenticated_user_is_linked_by_firebase_uid(self):

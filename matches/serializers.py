@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from routo.matches.models import Match
+from matches.models import Match
 class MatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Match

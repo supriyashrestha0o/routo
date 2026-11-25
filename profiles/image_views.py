@@ -7,8 +7,8 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from routo.profiles.models import Profile
-from routo.profiles.services import delete_cloudinary_image, upload_profile_image
+from profiles.models import Profile
+from profiles.services import delete_cloudinary_image, upload_profile_image
 
 
 class CloudinaryUnavailable(APIException):

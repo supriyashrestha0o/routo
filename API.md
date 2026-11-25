@@ -92,6 +92,10 @@ When replacing an image, the profile row is updated to the new Cloudinary URL fi
 
 Push delivery requires a valid Firebase Admin service account path on the Django server and registered device tokens. Ride data stays in MySQL; Firestore is not used by this backend.
 
+## Report administration
+
+In Django admin, open **Reports**, select one or more report rows, and choose **Delete selected reported users and all of their reports**. The action deletes each distinct reported user. Because report foreign keys use cascade deletion, every report about a deleted user is removed as well, including additional reports that were not selected.
+
 ## Errors
 
 Validation errors return HTTP 400, ownership violations 403, unknown resources 404, and absent/invalid Firebase credentials or tokens 401. The server refuses requests when Firebase token verification is not configured; development clients should not bypass authentication.

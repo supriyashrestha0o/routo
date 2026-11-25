@@ -1,6 +1,6 @@
 from rest_framework import generics
-from routo.reviews.models import Review
-from routo.reviews.serializers import ReviewSerializer
+from reviews.models import Review
+from reviews.serializers import ReviewSerializer
 class ReviewListCreateView(generics.ListCreateAPIView):
     serializer_class = ReviewSerializer
     def get_queryset(self):

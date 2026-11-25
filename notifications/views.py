@@ -1,8 +1,8 @@
 from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from routo.notifications.models import DeviceToken
-from routo.notifications.serializers import DeviceTokenSerializer
+from notifications.models import DeviceToken
+from notifications.serializers import DeviceTokenSerializer
 
 class DeviceTokenListCreateView(generics.ListCreateAPIView):
     serializer_class = DeviceTokenSerializer

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from routo.reviews.models import Review
+from reviews.models import Review
 class ReviewSerializer(serializers.ModelSerializer):
     reviewer_id = serializers.IntegerField(read_only=True)
     class Meta:

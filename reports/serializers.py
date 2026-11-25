@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from routo.reports.models import Report
+from reports.models import Report
 class ReportSerializer(serializers.ModelSerializer):
     reporter_id = serializers.IntegerField(read_only=True)
     class Meta:

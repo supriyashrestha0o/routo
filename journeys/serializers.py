@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from routo.journeys.models import Journey
+from journeys.models import Journey
 
 class JourneySerializer(serializers.ModelSerializer):
     driver_id = serializers.IntegerField(read_only=True)

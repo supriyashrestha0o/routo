@@ -1,6 +1,6 @@
 from rest_framework import generics
-from routo.profiles.models import Profile
-from routo.profiles.serializers import ProfileSerializer
+from profiles.models import Profile
+from profiles.serializers import ProfileSerializer
 
 class MyProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = ProfileSerializer

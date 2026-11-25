@@ -1,3 +1,3 @@
 from django.contrib import admin
-from routo.journeys.models import Journey
+from journeys.models import Journey
 admin.site.register(Journey)

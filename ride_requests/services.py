@@ -1,10 +1,10 @@
 from django.db import transaction
 from django.db.models import F
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
-from routo.journeys.models import Journey
+from journeys.models import Journey
 from matches.models import Match
-from routo.notifications.services import send_push
-from routo.ride_requests.models import RideRequest
+from notifications.services import send_push
+from ride_requests.models import RideRequest
 
 @transaction.atomic
 def decide_request(*, request_id, driver, accept):

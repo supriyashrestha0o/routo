@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from routo.notifications.models import DeviceToken
+from notifications.models import DeviceToken
 
 class DeviceTokenSerializer(serializers.ModelSerializer):
     class Meta:

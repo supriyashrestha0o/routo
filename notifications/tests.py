@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
-from routo.accounts.models import RouteUser
-from routo.notifications.models import DeviceToken
+from accounts.models import RouteUser
+from notifications.models import DeviceToken
 
 class DeviceTokenApiTests(TestCase):
     def test_register_and_remove_own_device_token(self):

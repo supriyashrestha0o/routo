@@ -2,8 +2,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
-from routo.accounts.models import RouteUser
-from routo.matches.journeys.models import Journey
+from accounts.models import RouteUser
+from journeys.models import Journey
 
 class JourneyApiTests(TestCase):
     def setUp(self):

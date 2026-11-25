@@ -7,8 +7,8 @@ from django.test import override_settings
 from PIL import Image
 from rest_framework.test import APIClient
 
-from routo.accounts.models import RouteUser
-from routo.profiles.models import Profile
+from accounts.models import RouteUser
+from profiles.models import Profile
 
 
 def valid_png(name="profile.png"):

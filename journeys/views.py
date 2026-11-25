@@ -1,8 +1,8 @@
 from django.utils import timezone
 from rest_framework import generics
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from routo.journeys.models import Journey
-from routo.journeys.serializers import JourneySerializer
+from journeys.models import Journey
+from journeys.serializers import JourneySerializer
 
 class JourneyListCreateView(generics.ListCreateAPIView):
     serializer_class = JourneySerializer

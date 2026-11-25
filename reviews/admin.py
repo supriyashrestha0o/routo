@@ -1,3 +1,3 @@
 from django.contrib import admin
-from routo.reviews.models import Review
+from reviews.models import Review
 admin.site.register(Review)

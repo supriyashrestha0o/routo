@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from routo.accounts.models import RouteUser
+from accounts.models import RouteUser
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:

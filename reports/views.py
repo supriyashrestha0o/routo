@@ -1,6 +1,6 @@
 from rest_framework import generics
-from routo.reports.models import Report
-from routo.reports.serializers import ReportSerializer
+from reports.models import Report
+from reports.serializers import ReportSerializer
 class ReportListCreateView(generics.ListCreateAPIView):
     serializer_class = ReportSerializer
     def get_queryset(self):
