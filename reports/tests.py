@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import RouteUser
+from accounts.models import BlockedFirebaseIdentity, RouteUser
 from reports.models import Report
 
 
@@ -90,3 +91,49 @@ class ReportDeletionTests(TestCase):
                 reported_user_id__in=[self.reported_user.pk, self.second_reported_user.pk]
             ).exists()
         )
+        self.assertTrue(
+            BlockedFirebaseIdentity.objects.filter(
+                firebase_uid=self.reported_user.firebase_uid
+            ).exists()
+        )
+        self.assertTrue(
+            BlockedFirebaseIdentity.objects.filter(
+                firebase_uid=self.second_reported_user.firebase_uid
+            ).exists()
+        )
+
+    def test_admin_action_requires_user_delete_permission(self):
+        report = Report.objects.create(
+            reporter=self.reporter,
+            reported_user=self.reported_user,
+            description="Reported user",
+        )
+        staff_user = get_user_model().objects.create_user(
+            username="limited-report-admin",
+            email="limited-admin@example.com",
+            password="test-password",
+            is_staff=True,
+        )
+        staff_user.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="reports",
+                codename="view_report",
+            ),
+            Permission.objects.get(
+                content_type__app_label="reports",
+                codename="delete_report",
+            ),
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.post(
+            reverse("admin:reports_report_changelist"),
+            {
+                "action": "delete_reported_users",
+                "_selected_action": [str(report.pk)],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(RouteUser.objects.filter(pk=self.reported_user.pk).exists())
+        self.assertFalse(BlockedFirebaseIdentity.objects.exists())

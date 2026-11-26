@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class RouteUser(models.Model):
     firebase_uid = models.CharField(max_length=128, unique=True)
     email = models.EmailField(blank=True)
@@ -16,3 +17,13 @@ class RouteUser(models.Model):
 
     def __str__(self):
         return self.email or self.firebase_uid
+
+
+class BlockedFirebaseIdentity(models.Model):
+    firebase_uid = models.CharField(max_length=128, unique=True)
+    email = models.EmailField(blank=True)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.firebase_uid

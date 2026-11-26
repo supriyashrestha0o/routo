@@ -37,7 +37,25 @@ class ProfileApiTests(TestCase):
         self.assertEqual(profile.university, "Route U")
         self.assertEqual(profile.profile_image_url, "")
 
+    def test_profile_default_name_is_safe_for_long_email(self):
+        user = RouteUser.objects.create(
+            firebase_uid="long-email-user",
+            email=f"{'a' * 240}@example.com",
+        )
+        client = APIClient(); client.force_authenticate(user)
 
+        response = client.get("/api/profiles/me/")
+
+        self.assertEqual(response.status_code, 200)
+        profile = Profile.objects.get(user=user)
+        self.assertLessEqual(len(profile.full_name), 120)
+
+
+@override_settings(
+    CLOUDINARY_CLOUD_NAME="cloud",
+    CLOUDINARY_API_KEY="key",
+    CLOUDINARY_API_SECRET="secret",
+)
 class ProfileImageUploadTests(TestCase):
     endpoint = "/api/profiles/me/image/"
     cloudinary_result = {

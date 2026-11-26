@@ -1,30 +1,73 @@
 from datetime import timedelta
 from unittest.mock import patch
+
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
+
 from accounts.models import RouteUser
 from journeys.models import Journey
+from matches.models import Match
 from ride_requests.models import RideRequest
+
 
 class RideRequestApiTests(TestCase):
     def setUp(self):
         self.driver = RouteUser.objects.create(firebase_uid="request-driver")
         self.passenger = RouteUser.objects.create(firebase_uid="request-passenger")
         self.other = RouteUser.objects.create(firebase_uid="request-other")
-        self.journey = Journey.objects.create(driver=self.driver, origin="A", destination="B", departure_time=timezone.now()+timedelta(days=1), total_seats=1, available_seats=1)
+        self.journey = Journey.objects.create(
+            driver=self.driver,
+            origin="A",
+            destination="B",
+            departure_time=timezone.now() + timedelta(days=1),
+            total_seats=1,
+            available_seats=1,
+        )
         self.client = APIClient()
-    def request_ride(self):
+
+    def request_ride(self, seats_requested=1):
         self.client.force_authenticate(self.passenger)
-        return self.client.post("/api/ride-requests/", {"journey": self.journey.pk, "seats_requested": 1}, format="json")
+        return self.client.post(
+            "/api/ride-requests/",
+            {"journey": self.journey.pk, "seats_requested": seats_requested},
+            format="json",
+        )
+
     def test_passenger_request_and_duplicate_prevention(self):
         self.assertEqual(self.request_ride().status_code, 201)
-        self.assertEqual(self.request_ride().status_code, 400)
+        duplicate = self.request_ride()
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("already requested", str(duplicate.json()["error"]))
         self.assertEqual(RideRequest.objects.count(), 1)
+
     def test_cannot_request_own_journey(self):
         self.client.force_authenticate(self.driver)
-        response = self.client.post("/api/ride-requests/", {"journey": self.journey.pk}, format="json")
+        response = self.client.post(
+            "/api/ride-requests/",
+            {"journey": self.journey.pk},
+            format="json",
+        )
         self.assertEqual(response.status_code, 400)
+
+    def test_zero_seats_is_rejected_with_correct_error(self):
+        response = self.request_ride(seats_requested=0)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("seats_requested", response.json()["error"])
+        self.assertNotIn("already requested", str(response.json()["error"]))
+        self.assertFalse(RideRequest.objects.exists())
+
+    def test_departed_journey_cannot_be_requested(self):
+        self.journey.departure_time = timezone.now() - timedelta(hours=1)
+        self.journey.save(update_fields=("departure_time",))
+
+        response = self.request_ride()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("departed", str(response.json()["error"]))
+        self.assertFalse(RideRequest.objects.exists())
+
     def test_accept_consumes_seat_once_and_creates_match(self):
         request = self.request_ride().json()["data"]["id"]
         self.client.force_authenticate(self.driver)
@@ -34,21 +77,37 @@ class RideRequestApiTests(TestCase):
         self.assertEqual(self.journey.available_seats, 0)
         self.assertEqual(self.journey.status, Journey.Status.FULL)
         self.assertTrue(RideRequest.objects.get(pk=request).match)
-        self.assertEqual(self.client.post(f"/api/ride-requests/{request}/accept/").status_code, 400)
+        self.assertEqual(
+            self.client.post(f"/api/ride-requests/{request}/accept/").status_code,
+            400,
+        )
+
     def test_only_owner_can_decide_request(self):
         request = self.request_ride().json()["data"]["id"]
         self.client.force_authenticate(self.other)
-        self.assertEqual(self.client.post(f"/api/ride-requests/{request}/accept/").status_code, 403)
+        response = self.client.post(f"/api/ride-requests/{request}/accept/")
+        self.assertEqual(response.status_code, 403)
+
     def test_insufficient_seats_rejected(self):
-        self.client.force_authenticate(self.passenger)
-        response = self.client.post("/api/ride-requests/", {"journey": self.journey.pk, "seats_requested": 2}, format="json")
+        response = self.request_ride(seats_requested=2)
         self.assertEqual(response.status_code, 400)
+
     def test_driver_and_passenger_request_lists(self):
         request = self.request_ride().json()["data"]["id"]
         self.client.force_authenticate(self.driver)
-        self.assertEqual(len(self.client.get(f"/api/ride-requests/journeys/{self.journey.pk}/").json()["data"]), 1)
+        self.assertEqual(
+            len(
+                self.client.get(
+                    f"/api/ride-requests/journeys/{self.journey.pk}/"
+                ).json()["data"]
+            ),
+            1,
+        )
         self.client.force_authenticate(self.passenger)
-        self.assertEqual(self.client.get("/api/ride-requests/mine/").json()["data"][0]["id"], request)
+        self.assertEqual(
+            self.client.get("/api/ride-requests/mine/").json()["data"][0]["id"],
+            request,
+        )
 
     def test_reject_keeps_seats_and_updates_passenger(self):
         request = self.request_ride().json()["data"]["id"]
@@ -57,13 +116,59 @@ class RideRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.journey.refresh_from_db()
         self.assertEqual(self.journey.available_seats, 1)
-        self.assertEqual(RideRequest.objects.get(pk=request).status, RideRequest.Status.REJECTED)
+        self.assertEqual(
+            RideRequest.objects.get(pk=request).status,
+            RideRequest.Status.REJECTED,
+        )
+
+    def test_passenger_can_cancel_pending_request(self):
+        request = self.request_ride().json()["data"]["id"]
+        self.client.force_authenticate(self.passenger)
+
+        response = self.client.post(f"/api/ride-requests/{request}/cancel/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            RideRequest.objects.get(pk=request).status,
+            RideRequest.Status.CANCELLED,
+        )
+
+    def test_cancelling_accepted_request_restores_seat_and_removes_match(self):
+        request = self.request_ride().json()["data"]["id"]
+        self.client.force_authenticate(self.driver)
+        self.client.post(f"/api/ride-requests/{request}/accept/")
+        match = Match.objects.get(ride_request_id=request)
+        self.client.force_authenticate(self.passenger)
+
+        response = self.client.post(f"/api/ride-requests/{request}/cancel/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.journey.refresh_from_db()
+        self.assertEqual(self.journey.available_seats, 1)
+        self.assertEqual(self.journey.status, Journey.Status.OPEN)
+        self.assertEqual(
+            RideRequest.objects.get(pk=request).status,
+            RideRequest.Status.CANCELLED,
+        )
+        self.assertFalse(Match.objects.filter(pk=match.pk).exists())
+
+    def test_other_user_cannot_cancel_request(self):
+        request = self.request_ride().json()["data"]["id"]
+        self.client.force_authenticate(self.other)
+
+        response = self.client.post(f"/api/ride-requests/{request}/cancel/")
+
+        self.assertEqual(response.status_code, 403)
 
     def test_new_request_schedules_driver_push(self):
         self.client.force_authenticate(self.passenger)
         with patch("ride_requests.views.send_push") as send_push:
             with self.captureOnCommitCallbacks(execute=True):
-                response = self.client.post("/api/ride-requests/", {"journey": self.journey.pk}, format="json")
+                response = self.client.post(
+                    "/api/ride-requests/",
+                    {"journey": self.journey.pk},
+                    format="json",
+                )
         self.assertEqual(response.status_code, 201)
         send_push.assert_called_once()
 

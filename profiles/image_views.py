@@ -1,3 +1,5 @@
+import warnings
+
 from PIL import Image, UnidentifiedImageError
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
@@ -8,7 +10,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from profiles.models import Profile
-from profiles.services import delete_cloudinary_image, upload_profile_image
+from profiles.services import (
+    default_profile_full_name,
+    delete_cloudinary_image,
+    upload_profile_image,
+)
 
 
 class CloudinaryUnavailable(APIException):
@@ -24,11 +30,19 @@ def validate_profile_image(image: UploadedFile) -> None:
         raise ValidationError({"image": f"Image must be no larger than {limit_mb:g} MB."})
     try:
         image.seek(0)
-        with Image.open(image) as decoded:
-            actual_format = decoded.format
-            width, height = decoded.size
-            decoded.verify()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(image) as decoded:
+                actual_format = decoded.format
+                width, height = decoded.size
+                decoded.verify()
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+    ):
         raise ValidationError({"image": "Upload a valid JPEG, PNG, or WebP image."})
     finally:
         image.seek(0)
@@ -49,7 +63,7 @@ class MyProfileImageUploadView(APIView):
 
         profile, _ = Profile.objects.get_or_create(
             user=request.user,
-            defaults={"full_name": request.user.email or "Student"},
+            defaults={"full_name": default_profile_full_name(request.user)},
         )
         previous_public_id = profile.profile_image_public_id
         try:

@@ -4,3 +4,7 @@
 .env copy.example
 __pycache__/
 *.py[cod]
+db.sqlite3
+staticfiles/
+media/
+*.log

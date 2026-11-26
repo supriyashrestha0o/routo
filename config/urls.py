@@ -1,13 +1,13 @@
 
 from django.contrib import admin
 from django.urls import include, path
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
+
+from config.health import health
+
 
 def home(request):
     return HttpResponse("Route API is running successfully!")
-
-def health(request):
-    return JsonResponse({"status": "ok"})
 
 urlpatterns = [
     path('', home, name='home'),

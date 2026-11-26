@@ -6,13 +6,24 @@ from notifications.serializers import DeviceTokenSerializer
 
 class DeviceTokenListCreateView(generics.ListCreateAPIView):
     serializer_class = DeviceTokenSerializer
+
     def get_queryset(self):
         return DeviceToken.objects.filter(user=self.request.user)
+
     def perform_create(self, serializer):
         token = serializer.validated_data["token"]
-        DeviceToken.objects.filter(token=token).update(user=self.request.user, active=True, platform=serializer.validated_data.get("platform", ""))
-        if not DeviceToken.objects.filter(token=token, user=self.request.user).exists():
-            serializer.save(user=self.request.user)
+        instance, _ = DeviceToken.objects.update_or_create(
+            token_hash=DeviceToken.hash_token(token),
+            defaults={
+                "token": token,
+                "user": self.request.user,
+                "active": True,
+                "platform": serializer.validated_data.get("platform", ""),
+            },
+        )
+        # Ensure the create response includes the persisted id, including for
+        # an idempotent re-registration of an existing token.
+        serializer.instance = instance
 
 class DeviceTokenDeleteView(APIView):
     def delete(self, request, token_id):

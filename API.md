@@ -1,8 +1,22 @@
 # Route Backend API
 
-All endpoints use the `/api/` prefix and successful responses use `{ "success": true, "data": ... }`. Errors use `{ "success": false, "error": ..., "status": ... }`. Send `Authorization: Bearer <Firebase ID token>` on every endpoint. Firebase ID tokens are verified by Django; Flutter must never contain a Firebase service account key.
+All `/api/` endpoints use the `{ "success": true, "data": ... }` response envelope. Errors use `{ "success": false, "error": ..., "status": ... }`, including unexpected server errors. Send `Authorization: Bearer <Firebase ID token>` on every `/api/` endpoint. Firebase ID tokens are verified by Django; Flutter must never contain a Firebase service account key.
 
-Configure `.env` values from `.env.example`, install `requirements.txt`, create the MySQL 8 database, then run `python manage.py migrate` and `python manage.py runserver 0.0.0.0:8000`. For two phones, set `DJANGO_ALLOWED_HOSTS` to the backend host/IP and have both phones use the same reachable base URL. `localhost` on a phone means that phone itself.
+## Setup
+
+1. Create a Python 3.13 virtual environment and install `requirements.txt`.
+2. Copy `.env.example` to `.env` and configure all required values.
+3. Create the MySQL 8 database and apply migrations with `python manage.py migrate`.
+4. Start the development server with `python manage.py runserver 0.0.0.0:8000`.
+
+For two phones, set `DJANGO_ALLOWED_HOSTS` to the backend host/IP and use the same reachable base URL on both phones. `localhost` on a phone means that phone itself.
+
+Production mode fails closed when `DJANGO_SECRET_KEY`, Firebase credentials, or Cloudinary credentials are missing. Rotate credentials that have previously been committed to source control before deploying.
+
+## Health and readiness
+
+- `GET /` — liveness response.
+- `GET /health` — readiness response. It checks the database and verifies that Firebase and Cloudinary are configured. It returns HTTP 503 with a `degraded` status when any required dependency is unavailable.
 
 ## Endpoints
 
@@ -13,20 +27,24 @@ Configure `.env` values from `.env.example`, install `requirements.txt`, create 
 | GET, PUT, PATCH | `/api/profiles/me/` | Read/create or update own profile |
 | POST | `/api/profiles/me/image/` | Upload or replace own profile picture |
 | GET, POST | `/api/journeys/` | List/search open journeys or create one as the authenticated driver |
-| GET, PUT, PATCH | `/api/journeys/{id}/` | Read or update; only owner may update |
-| POST | `/api/journeys/{id}/cancel/` | Cancel own journey |
+| GET, PUT, PATCH | `/api/journeys/{id}/` | Read or update; only the owner may update |
+| POST | `/api/journeys/{id}/cancel/` | Cancel own journey and cancel affected requests |
+| POST | `/api/journeys/{id}/complete/` | Complete own journey after its departure time |
 | POST | `/api/ride-requests/` | Request seats on a journey |
 | GET | `/api/ride-requests/mine/` | Passenger's requests and current statuses |
-| GET | `/api/ride-requests/journeys/{journey_id}/` | Requests for a journey owned by current driver |
-| POST | `/api/ride-requests/{id}/accept/` | Accept pending request (owner only) |
-| POST | `/api/ride-requests/{id}/reject/` | Reject pending request (owner only) |
-| GET | `/api/matches/` | Matches involving current user |
+| GET | `/api/ride-requests/journeys/{journey_id}/` | Requests for a journey owned by the current driver |
+| POST | `/api/ride-requests/{id}/accept/` | Accept a pending request (owner only) |
+| POST | `/api/ride-requests/{id}/reject/` | Reject a pending request (owner only) |
+| POST | `/api/ride-requests/{id}/cancel/` | Cancel the passenger's own pending or accepted request |
+| GET | `/api/matches/` | Matches involving the current user |
 | GET, POST | `/api/notifications/devices/` | List/register own FCM device token |
 | DELETE | `/api/notifications/devices/{id}/` | Remove own device token |
-| GET, POST | `/api/reviews/` | List own reviews (or `?user={id}` for reviews of a student) / create a review |
+| GET, POST | `/api/reviews/` | List own authored reviews (or `?user={id}` for received reviews) / create a review |
 | GET, POST | `/api/reports/` | List own reports / file a report |
 
-Journey search accepts optional `?origin=...&destination=...` substring filters. Journey fields on create: `origin`, `destination`, `departure_time` (ISO 8601), `total_seats`, optional `notes`; available seats are initialized by the server. Example:
+## Journeys and ride requests
+
+Journey search accepts optional `?origin=...&destination=...` substring filters. Journey fields on create are `origin`, `destination`, `departure_time` (ISO 8601), `total_seats`, and optional `notes`. Available seats are initialized by the server.
 
 ```json
 {
@@ -38,15 +56,17 @@ Journey search accepts optional `?origin=...&destination=...` substring filters.
 }
 ```
 
-Request body: `{ "journey": 12, "seats_requested": 1 }`. Request status is server-controlled (`pending`, `accepted`, `rejected`, `cancelled`). Accepting locks the journey row in a database transaction, decrements seats and creates a match atomically. Rejected requests do not consume seats. A unique journey/passenger constraint prevents duplicate requests.
+Origin and destination must differ, departure must be in the future, and seat counts must be between 1 and 65,535. Journey updates lock the journey row, so concurrent accept decisions cannot be overwritten by a stale seat count. Increasing capacity reopens a full journey; reducing capacity cannot go below accepted requests.
 
-Profile body fields: `full_name`, `phone_number`, `university`, `student_id`, `is_driver`. Profile responses include `profile_image_url` (empty until an image is uploaded). Token registration body: `{ "token": "FCM registration token", "platform": "android" }`. Review body: `{ "reviewed_user": 4, "journey": 12, "rating": 5, "comment": "On time" }`. Report body: `{ "reported_user": 4, "journey": 12, "description": "..." }`.
+A ride request body is `{ "journey": 12, "seats_requested": 1 }`. Seat counts must be between 1 and 65,535, and departed or unavailable journeys cannot be requested. Request status is server-controlled (`pending`, `accepted`, `rejected`, `cancelled`). Accepting locks the journey row in a database transaction, decrements seats, and creates a match atomically. A unique journey/passenger constraint prevents duplicate requests.
 
-## Profile image upload
+Cancelling a journey cancels pending and accepted requests, removes their matches, and releases the journey. Cancelling an accepted passenger request restores its seats and removes the match. Completing a journey is available after its scheduled departure, cancels pending requests, and preserves accepted matches.
 
-Send `POST /api/profiles/me/image/` with the Firebase ID token in the Bearer authorization header and a `multipart/form-data` file field named `image`. JPEG, PNG, and WebP image contents are accepted, up to `PROFILE_IMAGE_MAX_BYTES` (5 MiB by default). The server inspects the actual image data, uploads it to Cloudinary over HTTPS, and stores the resulting secure URL and Cloudinary public ID in the authenticated user's MySQL profile row. The public ID is kept server-side for replacement cleanup; API responses expose only the image URL. A user can only upload to their own `/me/` profile.
+## Profiles and image uploads
 
-Example success response:
+A profile body contains `full_name`, `phone_number`, `university`, `student_id`, and `is_driver`. Profile responses include `profile_image_url` (empty until an image is uploaded).
+
+Send `POST /api/profiles/me/image/` with the Firebase ID token in the Bearer authorization header and a `multipart/form-data` file field named `image`. JPEG, PNG, and WebP image contents are accepted, up to `PROFILE_IMAGE_MAX_BYTES` (5 MiB by default). The server inspects the actual image data, uploads it to Cloudinary over HTTPS, and stores the resulting secure URL and Cloudinary public ID in the authenticated user's profile row. The public ID stays server-side for replacement cleanup; API responses expose only the image URL.
 
 ```json
 {
@@ -58,44 +78,43 @@ Example success response:
 }
 ```
 
-Flutter example using `http.MultipartRequest`:
+When replacing an image, the profile row is updated to the new Cloudinary URL first; the previous Cloudinary asset is then deleted. If old-asset cleanup fails, the new database reference remains valid and the old asset may need later cleanup.
 
-```dart
-final request = http.MultipartRequest(
-  'POST',
-  Uri.parse('$baseUrl/api/profiles/me/image/'),
-);
-request.headers['Authorization'] = 'Bearer $firebaseIdToken';
-request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
-final streamed = await request.send();
-final response = await http.Response.fromStream(streamed);
-final body = jsonDecode(response.body);
-if (response.statusCode == 200) {
-  final imageUrl = body['data']['profile_image'];
-  // Display imageUrl with Image.network(imageUrl).
-} else {
-  // Validation errors are HTTP 400; missing/invalid auth is 401;
-  // Cloudinary upload errors are HTTP 502. Read body['error'] for details.
+## Device tokens
+
+Register an FCM registration token with `{ "token": "FCM registration token", "platform": "android" }`. Registration is idempotent: re-registering a token returns the existing token id, updates its platform, reactivates it, and transfers ownership to the current account.
+
+## Reviews and reports
+
+A review must reference a completed journey. The reviewer must be the journey driver or an accepted matched passenger, and the reviewed user must be the counterpart. Self-reviews, unrelated users, incomplete journeys, and duplicate reviews are rejected.
+
+```json
+{
+  "reviewed_user": 4,
+  "journey": 12,
+  "rating": 5,
+  "comment": "On time"
 }
 ```
 
-When replacing an image, the profile row is updated to the new Cloudinary URL first; the previous Cloudinary asset is then deleted. If old-asset cleanup fails, the new database reference remains valid and the old asset may need later cleanup.
+A report body is `{ "reported_user": 4, "journey": 12, "description": "..." }`. A user cannot report themselves.
 
 ## Phone workflow
 
 1. Each phone signs in with Firebase Auth and sends its current ID token as a Bearer token.
-2. Driver registers its FCM token, then POSTs a journey to `/api/journeys/`.
-3. Passenger GETs `/api/journeys/`, then POSTs to `/api/ride-requests/`.
+2. The driver registers its FCM token, then POSTs a journey to `/api/journeys/`.
+3. A passenger GETs `/api/journeys/`, then POSTs to `/api/ride-requests/`.
 4. Django saves request state in MySQL and sends FCM to the driver's registered devices.
-5. Driver GETs `/api/ride-requests/journeys/{id}/` and accepts or rejects the request.
-6. Passenger GETs `/api/ride-requests/mine/` to see status; both can GET `/api/matches/`.
+5. The driver GETs `/api/ride-requests/journeys/{id}/` and accepts or rejects the request.
+6. The passenger GETs `/api/ride-requests/mine/` to see status; both can GET `/api/matches/`.
+7. The driver completes the journey after departure. Accepted participants can then review each other.
 
-Push delivery requires a valid Firebase Admin service account path on the Django server and registered device tokens. Ride data stays in MySQL; Firestore is not used by this backend.
+Push delivery requires a valid Firebase Admin service-account file on the Django server and registered device tokens. Ride data stays in the configured database; Firestore is not used by this backend.
 
 ## Report administration
 
-In Django admin, open **Reports**, select one or more report rows, and choose **Delete selected reported users and all of their reports**. The action deletes each distinct reported user. Because report foreign keys use cascade deletion, every report about a deleted user is removed as well, including additional reports that were not selected.
+In Django admin, open **Reports**, select report rows, and choose **Delete selected reported users and all of their reports**. The action requires both report-deletion and Firebase-user-deletion permissions. Before deleting a user, the backend stores a Firebase identity tombstone so a valid token cannot automatically recreate the blocked account.
 
-## Errors
+## Errors and limits
 
-Validation errors return HTTP 400, ownership violations 403, unknown resources 404, and absent/invalid Firebase credentials or tokens 401. The server refuses requests when Firebase token verification is not configured; development clients should not bypass authentication.
+Validation errors return HTTP 400, ownership violations return 403, missing resources return 404, oversized request bodies return 413, and unexpected server errors return a JSON HTTP 500 response. Authentication failures return 401. API traffic is throttled using the rates configured by `API_ANON_RATE` and `API_USER_RATE`.
