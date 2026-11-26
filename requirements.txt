@@ -6,3 +6,4 @@ firebase-admin>=6.6,<8
 cloudinary>=1.47,<2
 python-dotenv>=1.0,<2
 Pillow>=10,<13
+gunicorn>=23,<24
