@@ -131,7 +131,7 @@ else:
             },
         }
     }
-
+print("DB USER:", repr(os.environ.get("DB_USER")))
 AUTH_PASSWORD_VALIDATORS = []
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kathmandu"
