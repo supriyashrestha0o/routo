@@ -107,13 +107,21 @@ if DB_ENGINE == "sqlite":
         }
     }
 else:
+    mysql_required = ("DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST")
+    mysql_missing = [name for name in mysql_required if not os.environ.get(name, "").strip()]
+    if mysql_missing:
+        raise ImproperlyConfigured(
+            "MySQL is selected, but these environment variables are missing: "
+            + ", ".join(mysql_missing)
+        )
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            "NAME": os.environ.get("DB_NAME", "	main"),
-            "USER": os.environ.get("DB_USER", "u_r77np67pb5.routo-yyj3nh"),
-            "PASSWORD": os.environ.get("DB_PASSWORD", "jIbRV2Xnar4EZ0uKd5iYvNdGrhthq955"),
-            "HOST": os.environ.get("DB_HOST", "routo-yyj3nh.db.enzonic.com"),
+            "NAME": os.environ["DB_NAME"].strip(),
+            "USER": os.environ["DB_USER"].strip(),
+            "PASSWORD": os.environ["DB_PASSWORD"],
+            "HOST": os.environ["DB_HOST"].strip(),
             "PORT": os.environ.get("DB_PORT", "3306"),
             "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
             "OPTIONS": {
