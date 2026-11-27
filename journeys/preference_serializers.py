@@ -32,3 +32,7 @@ class PassengerTravelPreferenceSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+
+
+     
