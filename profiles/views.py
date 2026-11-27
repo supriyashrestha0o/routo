@@ -30,6 +30,58 @@ class MyProfileView(generics.RetrieveUpdateAPIView):
         return profile
 
 
+class RegistrationStatusView(APIView):
+
+    def get(self, request):
+        profile = Profile.objects.filter(user=request.user).first()
+
+        if profile is None:
+            return Response({
+                "success": True,
+                "completed": False,
+                "profile": None,
+                "journey": None,
+                "travel_preference": None,
+                "vehicle": None,
+                "verification": None,
+            })
+
+        if profile.is_driver:
+            # Registration creates a Journey for drivers. Read an existing
+            # record only; a status check must never create registration data.
+            journey = Journey.objects.filter(driver=request.user).first()
+            vehicle = DriverVehicle.objects.filter(user=request.user).first()
+            verification = DriverVerification.objects.filter(
+                user=request.user
+            ).first()
+            travel_preference = None
+            completed = journey is not None
+        else:
+            journey = None
+            vehicle = None
+            verification = None
+            travel_preference = PassengerTravelPreference.objects.filter(
+                user=request.user
+            ).first()
+            completed = travel_preference is not None
+
+        return Response({
+            "success": True,
+            "completed": completed,
+            "profile": ProfileSerializer(profile).data,
+            "journey": JourneySerializer(journey).data if journey else None,
+            "travel_preference": (
+                PassengerTravelPreferenceSerializer(travel_preference).data
+                if travel_preference else None
+            ),
+            "vehicle": DriverVehicleSerializer(vehicle).data if vehicle else None,
+            "verification": (
+                DriverVerificationSerializer(verification).data
+                if verification else None
+            ),
+        })
+
+
 class CompleteRegistrationView(APIView):
 
     @transaction.atomic
@@ -66,7 +118,6 @@ class CompleteRegistrationView(APIView):
             profile.is_driver,
         )
 
-        # Map Flutter journey field names to Django field names.
         origin = journey_data.get("origin", journey_data.get("pickup"))
         destination = journey_data.get("destination")
         departure_time = journey_data.get(
@@ -89,6 +140,7 @@ class CompleteRegistrationView(APIView):
         vehicle_serializer = None
         verification_serializer = None
         preference_serializer = None
+        preference_result = None
 
         if is_driver:
             if not isinstance(vehicle_data, dict) or not vehicle_data:
@@ -149,7 +201,6 @@ class CompleteRegistrationView(APIView):
             journey_serializer = JourneySerializer(data=journey_payload)
             journey_serializer.is_valid(raise_exception=True)
 
-            # Save driver information and create the offered ride.
             profile_serializer.save(user=request.user)
             vehicle_serializer.save()
             verification_serializer.save()
