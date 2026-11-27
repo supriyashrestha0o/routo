@@ -111,7 +111,7 @@ else:
         "default": {
             "ENGINE": "django.db.backends.mysql",
             "NAME": os.environ.get("DB_NAME", "	main"),
-            "USER": os.environ.get("DB_USER", "u_r77np67pb5"),
+            "USER": os.environ.get("DB_USER", "u_r77np67pb5.routo-yyj3nh"),
             "PASSWORD": os.environ.get("DB_PASSWORD", "jIbRV2Xnar4EZ0uKd5iYvNdGrhthq955"),
             "HOST": os.environ.get("DB_HOST", "routo-yyj3nh.db.enzonic.com"),
             "PORT": os.environ.get("DB_PORT", "3306"),
